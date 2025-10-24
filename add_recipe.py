@@ -43,7 +43,8 @@ def main():
         layout="wide"
     )
     
-    st.title("📖 База моих рецептов правильного питания")
+    st.title("📖 Добавление нового рецепта в систему НутринямAI")
+
     
     tab1, tab2 = st.tabs(["📝 Добавить рецепт", "📊 Мои рецепты"])
     
@@ -152,7 +153,7 @@ def final_recipe_form():
                 new_unit = st.selectbox(
                     "Единица",
                     ["гр", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"],
-                    index=["г", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"].index(ingredient["unit"]),
+                    index=["гр", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"].index(ingredient["unit"]),
                     key=f"edit_unit_{i}",
                     label_visibility="collapsed"
                 )
@@ -184,7 +185,7 @@ def final_recipe_form():
     
     # Основная форма рецепта
     st.write("---")
-    st.subheader("Информация о рецепте")
+    st.subheader("Рецепт")
     
     # Используем уникальные ключи для полей формы
     form_key = f"recipe_form_{len(st.session_state.recipes)}"
@@ -215,16 +216,15 @@ def final_recipe_form():
             )
             difficulty = st.selectbox(
                 "Сложность", 
-                ["легко", "средне", "сложно"],
+                ["легко", "средне", "сложно"], 
                 index=0, 
                 key=f"difficulty_{form_key}"
             )
         
         # Множественный выбор категорий
-        #st.subheader("📂 Категории рецепта")
         categories = st.multiselect(
             "Выберите подходящие категории*",
-            ["завтрак", "обед", "ужин", "салат", "суп", "десерт", "перекус"],
+            ["горячее", "салат", "суп", "десерт"],
             key=f"categories_{form_key}"
         )
         
@@ -272,14 +272,14 @@ def final_recipe_form():
                     "cooking_time": cooking_time,
                     "ingredients": st.session_state.temp_ingredients.copy(),
                     "instructions": [inst.strip() for inst in instructions.split('\n') if inst.strip()],
-                    "created_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "created_date": datetime.now().strftime("%Y-%m-%d")
                 }
                 
                 save_recipe(recipe)
                 # Очищаем временные данные (кроме автора)
                 st.session_state.temp_ingredients = []
                 st.success("✅ Рецепт успешно сохранен!")
-                st.balloons()  # ← ВОТ ОНИ, ЛЕТЯЩИЕ ШАРИКИ! 🎈
+                st.balloons()
                 # Перезагружаем страницу для очистки полей формы
                 st.rerun()
 
@@ -298,8 +298,47 @@ def save_recipe(recipe):
     except Exception as e:
         st.error(f"❌ Ошибка сохранения рецепта: {str(e)}")
 
+def delete_recipe(recipe_id):
+    """Удаляем рецепт по ID"""
+    try:
+        # Находим индекс рецепта
+        recipe_index = next((i for i, r in enumerate(st.session_state.recipes) if r['id'] == recipe_id), None)
+        
+        if recipe_index is not None:
+            # Удаляем рецепт из session state
+            deleted_recipe = st.session_state.recipes.pop(recipe_index)
+            
+            # Сохраняем обновленные данные в файл
+            with open('my_recipes.json', 'w', encoding='utf-8') as f:
+                json.dump(st.session_state.recipes, f, ensure_ascii=False, indent=2)
+            
+            st.success(f"✅ Рецепт '{deleted_recipe['name']}' успешно удален!")
+            st.rerun()
+        else:
+            st.error("❌ Рецепт не найден")
+    except Exception as e:
+        st.error(f"❌ Ошибка при удалении рецепта: {str(e)}")
+
+def clear_all_recipes():
+    """Очищаем все рецепты после скачивания"""
+    try:
+        # Сохраняем количество рецептов для сообщения
+        recipes_count = len(st.session_state.recipes)
+        
+        # Очищаем рецепты
+        st.session_state.recipes = []
+        
+        # Очищаем файл
+        with open('my_recipes.json', 'w', encoding='utf-8') as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+        
+        st.success(f"✅ Все рецепты ({recipes_count} шт.) успешно скачаны и очищены!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ Ошибка при очистке рецептов: {str(e)}")
+
 def view_recipes_final():
-    st.header("📚 Мои рецепты")
+    st.header("📚 Записанные рецепты")
     
     if not st.session_state.recipes:
         st.info("🍃 Пока нет сохраненных рецептов. Добавьте первый рецепт!")
@@ -307,34 +346,73 @@ def view_recipes_final():
     
     # Кнопка скачивания всех рецептов
     if st.session_state.recipes:
-        st.subheader("💾 Экспорт рецептов")
         
-        # Кнопка скачивания
+        # Кнопка скачивания с очисткой после скачивания
         try:
             json_data = json.dumps(st.session_state.recipes, ensure_ascii=False, indent=2)
-            st.download_button(
-                label="📥 Скачать все рецепты",
+            if st.download_button(
+                label="📥 Скачать все рецепты и очистить",
                 data=json_data,
                 file_name=f"my_recipes_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
                 mime="application/json",
-                help="Скачайте JSON файл со всеми вашими рецептами"
-            )
+                help="Скачайте JSON файл со всеми вашими рецептами и очистите базу"
+            ):
+                # Эта функция выполнится после успешного скачивания
+                clear_all_recipes()
         except Exception as e:
             st.error(f"❌ Ошибка создания файла для скачивания: {str(e)}")
         
-        # Показываем предпросмотр JSON
-        with st.expander("🔍 Предпросмотр JSON данных"):
+        # Редактирование JSON данных
+        with st.expander("🔧 Редактировать JSON данные"):
+            st.info("⚠️ Внимание: Будьте осторожны при редактировании JSON. Неправильный формат может привести к ошибкам.")
+            
+            # Показываем текущий JSON для редактирования
             try:
-                st.code(json.dumps(st.session_state.recipes, ensure_ascii=False, indent=2), language='json')
+                current_json = json.dumps(st.session_state.recipes, ensure_ascii=False, indent=2)
+                edited_json = st.text_area(
+                    "Редактировать JSON:",
+                    value=current_json,
+                    height=400,
+                    key="json_editor"
+                )
+                
+                if st.button("💾 Применить изменения", type="primary"):
+                    try:
+                        # Парсим отредактированный JSON
+                        new_recipes = json.loads(edited_json)
+                        
+                        # Проверяем что это валидный список рецептов
+                        if isinstance(new_recipes, list) and all(isinstance(recipe, dict) for recipe in new_recipes):
+                            st.session_state.recipes = new_recipes
+                            # Сохраняем в файл
+                            with open('my_recipes.json', 'w', encoding='utf-8') as f:
+                                json.dump(st.session_state.recipes, f, ensure_ascii=False, indent=2)
+                            st.success("✅ JSON данные успешно обновлены!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Неверный формат данных. Должен быть список рецептов.")
+                            
+                    except json.JSONDecodeError as e:
+                        st.error(f"❌ Ошибка в формате JSON: {str(e)}")
+                    except Exception as e:
+                        st.error(f"❌ Ошибка при применении изменений: {str(e)}")
+                        
             except Exception as e:
                 st.error(f"❌ Ошибка отображения JSON: {str(e)}")
     
     # Отображаем все рецепты без фильтров
     st.write(f"**Всего рецептов:** {len(st.session_state.recipes)}")
     
-    for recipe in st.session_state.recipes:
+    for i, recipe in enumerate(st.session_state.recipes):
         categories_text = ", ".join(recipe.get('categories', []))
         with st.expander(f"🍳 {recipe['name']} | 👤{recipe.get('author', 'Неизвестно')} | ⏱️{recipe['cooking_time']}мин | {recipe['difficulty'].upper()} | {categories_text}"):
+            
+            # Кнопка удаления рецепта
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button("🗑️ Удалить рецепт", key=f"delete_{i}", type="secondary"):
+                    delete_recipe(recipe['id'])
+            
             display_recipe_final(recipe)
 
 def display_recipe_final(recipe):
