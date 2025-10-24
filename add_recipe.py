@@ -3,6 +3,7 @@ import json
 import pandas as pd
 from datetime import datetime
 import uuid
+import os
 
 # Настройки для подавления предупреждений
 st.set_option('client.showErrorDetails', False)
@@ -11,14 +12,30 @@ def main():
     # Инициализация состояния сессии
     if 'recipes' not in st.session_state:
         try:
-            with open('my_recipes.json', 'r', encoding='utf-8') as f:
-                st.session_state.recipes = json.load(f)
-        except FileNotFoundError:
+            # Проверяем существует ли файл и не пустой ли он
+            if os.path.exists('my_recipes.json') and os.path.getsize('my_recipes.json') > 0:
+                with open('my_recipes.json', 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                    if content:  # Если файл не пустой
+                        st.session_state.recipes = json.loads(content)
+                    else:
+                        st.session_state.recipes = []
+            else:
+                st.session_state.recipes = []
+        except (json.JSONDecodeError, Exception) as e:
+            st.error(f"❌ Ошибка загрузки файла рецептов: {str(e)}")
             st.session_state.recipes = []
+            # Создаем пустой файл с корректным JSON
+            with open('my_recipes.json', 'w', encoding='utf-8') as f:
+                json.dump([], f, ensure_ascii=False, indent=2)
     
     # Инициализация временных ингредиентов
     if 'temp_ingredients' not in st.session_state:
         st.session_state.temp_ingredients = []
+    
+    # Инициализация имени автора (сохраняется между рецептами)
+    if 'saved_author' not in st.session_state:
+        st.session_state.saved_author = ""
 
     st.set_page_config(
         page_title="Мои ПП Рецепты", 
@@ -27,7 +44,6 @@ def main():
     )
     
     st.title("📖 База моих рецептов правильного питания")
-    st.write("Добавляйте и сохраняйте ваши любимые рецепты здорового питания!")
     
     tab1, tab2 = st.tabs(["📝 Добавить рецепт", "📊 Мои рецепты"])
     
@@ -38,10 +54,9 @@ def main():
         view_recipes_final()
 
 def final_recipe_form():
-    st.header("➕ Добавить новый рецепт")
     
     # Секция добавления ингредиентов
-    st.subheader("🧂 Добавление ингредиентов")
+    st.subheader("Ингредиенты")
     
     # Форма для добавления одного ингредиента
     with st.form("add_ingredient_form", clear_on_submit=True):
@@ -56,7 +71,7 @@ def final_recipe_form():
         with col3:
             ing_unit = st.selectbox(
                 "Единица измерения*", 
-                ["г", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"],
+                ["гр", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"],
                 key="ing_unit"
             )
         
@@ -136,7 +151,7 @@ def final_recipe_form():
                 # Выбор единицы измерения
                 new_unit = st.selectbox(
                     "Единица",
-                    ["г", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"],
+                    ["гр", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"],
                     index=["г", "мл", "ст.л.", "ч.л.", "шт", "по вкусу"].index(ingredient["unit"]),
                     key=f"edit_unit_{i}",
                     label_visibility="collapsed"
@@ -169,67 +184,73 @@ def final_recipe_form():
     
     # Основная форма рецепта
     st.write("---")
-    st.subheader("👨‍🍳 Информация о рецепте")
+    st.subheader("Информация о рецепте")
     
-    # Сохраняем текущие значения в session_state чтобы не терять при ошибках
-    if 'current_recipe_name' not in st.session_state:
-        st.session_state.current_recipe_name = ""
-    if 'current_cooking_time' not in st.session_state:
-        st.session_state.current_cooking_time = 30
-    if 'current_instructions' not in st.session_state:
-        st.session_state.current_instructions = ""
+    # Используем уникальные ключи для полей формы
+    form_key = f"recipe_form_{len(st.session_state.recipes)}"
     
-    with st.form("recipe_form"):
+    with st.form(form_key):
         col1, col2 = st.columns(2)
         
         with col1:
             name = st.text_input(
                 "Название рецепта*", 
                 placeholder="Салат из киноа с авокадо",
-                value=st.session_state.current_recipe_name,
-                key="recipe_name"
+                key=f"name_{form_key}"
             )
             cooking_time = st.number_input(
                 "Время готовки (мин)*", 
                 min_value=1, 
-                value=st.session_state.current_cooking_time,
-                key="cooking_time"
+                value=30,
+                key=f"cooking_time_{form_key}"
             )
         
         with col2:
-            difficulty = st.selectbox("Сложность", ["легко", "средне", "сложно"], index=0, key="difficulty")
+            # Поле автора с сохраненным значением
+            author = st.text_input(
+                "Автор рецепта*",
+                placeholder="Ваше имя",
+                value=st.session_state.saved_author,  # Используем сохраненное имя
+                key=f"author_{form_key}"
+            )
+            difficulty = st.selectbox(
+                "Сложность", 
+                ["легко", "средне", "сложно"], 
+                index=0, 
+                key=f"difficulty_{form_key}"
+            )
         
         # Множественный выбор категорий
-        st.subheader("📂 Категории рецепта")
+        #st.subheader("📂 Категории рецепта")
         categories = st.multiselect(
             "Выберите подходящие категории*",
             ["завтрак", "обед", "ужин", "салат", "суп", "десерт", "перекус"],
-            key="categories"
+            key=f"categories_{form_key}"
         )
         
         # Инструкция приготовления
-        st.subheader("👩‍🍳 Инструкция приготовления")
+        st.subheader("Приготовление")
         instructions = st.text_area(
             "Опишите шаги приготовления*",
             placeholder="Например:\n1. Отварить киноа согласно инструкции\n2. Нарезать авокадо и помидоры\n3. Смешать все ингредиенты\n4. Заправить оливковым маслом",
             height=150,
-            value=st.session_state.current_instructions,
-            key="instructions"
+            key=f"instructions_{form_key}"
         )
         
         # Кнопка сохранения рецепта
         submitted = st.form_submit_button("💾 Сохранить рецепт")
         
         if submitted:
-            # Сохраняем текущие значения в session_state
-            st.session_state.current_recipe_name = name
-            st.session_state.current_cooking_time = cooking_time
-            st.session_state.current_instructions = instructions
+            # Сохраняем имя автора для следующих рецептов
+            if author:
+                st.session_state.saved_author = author
             
             # Валидация данных
             errors = []
             if not name:
                 errors.append("❌ Введите название рецепта")
+            if not author:
+                errors.append("❌ Введите автора рецепта")
             if not st.session_state.temp_ingredients:
                 errors.append("❌ Добавьте хотя бы один ингредиент")
             if not instructions:
@@ -245,6 +266,7 @@ def final_recipe_form():
                 recipe = {
                     "id": str(uuid.uuid4()),
                     "name": name,
+                    "author": author,
                     "categories": categories,
                     "difficulty": difficulty,
                     "cooking_time": cooking_time,
@@ -254,14 +276,12 @@ def final_recipe_form():
                 }
                 
                 save_recipe(recipe)
-                # Очищаем временные данные
+                # Очищаем временные данные (кроме автора)
                 st.session_state.temp_ingredients = []
-                # Очищаем поля формы после успешного сохранения
-                st.session_state.current_recipe_name = ""
-                st.session_state.current_cooking_time = 30
-                st.session_state.current_instructions = ""
                 st.success("✅ Рецепт успешно сохранен!")
-                st.balloons()
+                st.balloons()  # ← ВОТ ОНИ, ЛЕТЯЩИЕ ШАРИКИ! 🎈
+                # Перезагружаем страницу для очистки полей формы
+                st.rerun()
 
 def save_recipe(recipe):
     """Сохраняем рецепт в JSON файл"""
@@ -271,8 +291,12 @@ def save_recipe(recipe):
     
     st.session_state.recipes.append(recipe)
     
-    with open('my_recipes.json', 'w', encoding='utf-8') as f:
-        json.dump(st.session_state.recipes, f, ensure_ascii=False, indent=2)
+    # Сохраняем в локальный файл
+    try:
+        with open('my_recipes.json', 'w', encoding='utf-8') as f:
+            json.dump(st.session_state.recipes, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"❌ Ошибка сохранения рецепта: {str(e)}")
 
 def view_recipes_final():
     st.header("📚 Мои рецепты")
@@ -281,40 +305,46 @@ def view_recipes_final():
         st.info("🍃 Пока нет сохраненных рецептов. Добавьте первый рецепт!")
         return
     
-    # Простые фильтры
-    col1, col2 = st.columns(2)
-    with col1:
-        all_categories = list(set([cat for r in st.session_state.recipes for cat in r.get('categories', [])]))
-        category_filter = st.selectbox("Фильтр по категории", ["Все"] + all_categories)
+    # Кнопка скачивания всех рецептов
+    if st.session_state.recipes:
+        st.subheader("💾 Экспорт рецептов")
+        
+        # Кнопка скачивания
+        try:
+            json_data = json.dumps(st.session_state.recipes, ensure_ascii=False, indent=2)
+            st.download_button(
+                label="📥 Скачать все рецепты",
+                data=json_data,
+                file_name=f"my_recipes_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json",
+                help="Скачайте JSON файл со всеми вашими рецептами"
+            )
+        except Exception as e:
+            st.error(f"❌ Ошибка создания файла для скачивания: {str(e)}")
+        
+        # Показываем предпросмотр JSON
+        with st.expander("🔍 Предпросмотр JSON данных"):
+            try:
+                st.code(json.dumps(st.session_state.recipes, ensure_ascii=False, indent=2), language='json')
+            except Exception as e:
+                st.error(f"❌ Ошибка отображения JSON: {str(e)}")
     
-    with col2:
-        difficulties = ["Все"] + list(set([r['difficulty'] for r in st.session_state.recipes]))
-        difficulty_filter = st.selectbox("Фильтр по сложности", difficulties)
+    # Отображаем все рецепты без фильтров
+    st.write(f"**Всего рецептов:** {len(st.session_state.recipes)}")
     
-    # Применяем фильтры
-    filtered_recipes = st.session_state.recipes
-    if category_filter != "Все":
-        filtered_recipes = [r for r in filtered_recipes if category_filter in r.get('categories', [])]
-    if difficulty_filter != "Все":
-        filtered_recipes = [r for r in filtered_recipes if r['difficulty'] == difficulty_filter]
-    
-    st.write(f"**Найдено рецептов:** {len(filtered_recipes)}")
-    
-    for recipe in filtered_recipes:
+    for recipe in st.session_state.recipes:
         categories_text = ", ".join(recipe.get('categories', []))
-        with st.expander(f"🍳 {recipe['name']} | ⏱️{recipe['cooking_time']}мин | {recipe['difficulty'].upper()} | {categories_text}"):
+        with st.expander(f"🍳 {recipe['name']} | 👤{recipe.get('author', 'Неизвестно')} | ⏱️{recipe['cooking_time']}мин | {recipe['difficulty'].upper()} | {categories_text}"):
             display_recipe_final(recipe)
 
 def display_recipe_final(recipe):
     col1, col2 = st.columns(2)
     
     with col1:
+        st.write(f"**👤 Автор:** {recipe.get('author', 'Неизвестно')}")
         st.write(f"**📦 Категории:** {', '.join(recipe.get('categories', []))}")
         st.write(f"**⚡ Сложность:** {recipe['difficulty']}")
         st.write(f"**⏱️ Время готовки:** {recipe['cooking_time']} мин")
-        # Безопасное отображение ID
-        if 'id' in recipe:
-            st.write(f"**🆔 ID рецепта:** {recipe['id'][:8]}...")
     
     with col2:
         # Подсчет ингредиентов с предподготовкой
