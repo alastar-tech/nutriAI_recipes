@@ -416,21 +416,10 @@ def view_recipes_final():
             display_recipe_final(recipe)
 
 def display_recipe_final(recipe):
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write(f"**👤 Автор:** {recipe.get('author', 'Неизвестно')}")
-        st.write(f"**📦 Категории:** {', '.join(recipe.get('categories', []))}")
-        st.write(f"**⚡ Сложность:** {recipe['difficulty']}")
-        st.write(f"**⏱️ Время готовки:** {recipe['cooking_time']} мин")
-    
-    with col2:
-        # Подсчет ингредиентов с предподготовкой
-        prep_ingredients = [ing for ing in recipe['ingredients'] if ing.get('needs_preparation', False)]
-        if prep_ingredients:
-            st.write("**⚠️ Ингредиенты с предподготовкой:**")
-            for ing in prep_ingredients:
-                st.write(f"- {ing['amount']} {ing['unit']} {ing['name']}")
+    st.write(f"**👤 Автор:** {recipe.get('author', 'Неизвестно')}")
+    st.write(f"**📦 Категории:** {', '.join(recipe.get('categories', []))}")
+    st.write(f"**⚡ Сложность:** {recipe['difficulty']}")
+    st.write(f"**⏱️ Время готовки:** {recipe['cooking_time']} мин")
     
     st.write("**🧂 Ингредиенты:**")
     for ing in recipe['ingredients']:
