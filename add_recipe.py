@@ -215,7 +215,7 @@ def final_recipe_form():
             )
             difficulty = st.selectbox(
                 "Сложность", 
-                ["легко", "средне", "сложно"], 
+                ["легко", "средне", "сложно"],
                 index=0, 
                 key=f"difficulty_{form_key}"
             )
